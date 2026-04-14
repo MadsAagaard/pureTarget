@@ -16,9 +16,9 @@ log.info """\
 Clinical Genetics Vejle: PacBio PureTarget v2
 ======================================================
 Genome       : $params.genome
-Genome FASTA : ${genome_fasta}
-Genome MMI   : $genome_mmi
-Genome ver.  : $genome_version
+Genome FASTA : $params.genome_fasta
+Genome MMI   : $params.genome_mmi
+Genome ver.  : $params.genome_version
 RunID        : $runID
 Script start : $date2
 ReadSet      : $params.readSet
@@ -72,7 +72,7 @@ process pbmm2_align {
     tuple val(meta), path(data)
     
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.bam"), path("${meta.id}.${genome_version}.${params.readSet}*bai"),  emit: bam
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.bam"), path("${meta.id}.${params.genome_version}.${params.readSet}*bai"),  emit: bam
     
     script:
     """
@@ -82,9 +82,9 @@ process pbmm2_align {
     --num-threads ${task.cpus} \
     --bam-index BAI \
     --sample ${meta.id} \
-    ${genome_mmi} \
+    ${params.genome_mmi} \
     ${data[0]} \
-    ${meta.id}.${genome_version}.${params.readSet}.bam
+    ${meta.id}.${params.genome_version}.${params.readSet}.bam
     """
 }
 
@@ -99,7 +99,7 @@ process pbmm2_align_mergedData {
     tuple val(meta), path(fofn)
     
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.bam"), path("${meta.id}.${genome_version}.${params.readSet}*bai"),  emit: bam
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.bam"), path("${meta.id}.${params.genome_version}.${params.readSet}*bai"),  emit: bam
     
     script:
     """
@@ -109,9 +109,9 @@ process pbmm2_align_mergedData {
     --num-threads ${task.cpus} \
     --bam-index BAI \
     --sample ${meta.id} \
-    ${genome_mmi} \
+    ${params.genome_mmi} \
     ${fofn} \
-    ${meta.id}.${genome_version}.${params.readSet}.bam
+    ${meta.id}.${params.genome_version}.${params.readSet}.bam
     """
 }
 
@@ -141,9 +141,9 @@ process trgt4_pureTarget{
     tuple val(meta), path(data)
     
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.trgt4.bam"), path("${meta.id}.${genome_version}.${params.readSet}.trgt4.bam.bai"), path("${meta.id}.${genome_version}.${params.readSet}.trgt4.vcf.gz"), path("${meta.id}.${genome_version}.${params.readSet}.trgt4.vcf.gz.tbi"),emit: trgt_full
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt4.bam"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt4.bam.bai"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt4.vcf.gz"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt4.vcf.gz.tbi"),emit: trgt_full
     tuple val(meta),path ("*.trgt4.*")
-    path("${meta.id}.${genome_version}.${params.readSet}.trgt4.vcf.gz"),emit: trgt_vcf
+    path("${meta.id}.${params.genome_version}.${params.readSet}.trgt4.vcf.gz"),emit: trgt_vcf
     script:
 
     //def sex=meta.sex=="male" ? "--karyotype XY" : "--karyotype XX"
@@ -151,17 +151,17 @@ process trgt4_pureTarget{
     """
     trgt genotype \
     --preset targeted \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     $karyotype \
     --reads ${data[0]} \
-    --output-prefix ${meta.id}.${genome_version}.${params.readSet}.trgt4.STRchive
+    --output-prefix ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.STRchive
 
-    bcftools sort -Oz -o ${meta.id}.${genome_version}.${params.readSet}.trgt4.vcf.gz ${meta.id}.${genome_version}.${params.readSet}.trgt4.STRchive.vcf.gz 
-    bcftools index -t ${meta.id}.${genome_version}.${params.readSet}.trgt4.vcf.gz
+    bcftools sort -Oz -o ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.vcf.gz ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.STRchive.vcf.gz 
+    bcftools index -t ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.vcf.gz
 
-    samtools sort -o ${meta.id}.${genome_version}.${params.readSet}.trgt4.bam ${meta.id}.${genome_version}.${params.readSet}.trgt4.STRchive.spanning.bam
-    samtools index ${meta.id}.${genome_version}.${params.readSet}.trgt4.bam
+    samtools sort -o ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.bam ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.STRchive.spanning.bam
+    samtools index ${meta.id}.${params.genome_version}.${params.readSet}.trgt4.bam
     """
 }
 
@@ -180,22 +180,22 @@ process trgt4_pureTarget_plots{
 
     """
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id ${data.strID} \
     --squished \
-    -o ${data.strID}.${meta.id}.${genome_version}.${params.readSet}.alleleSquished.pdf
+    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.alleleSquished.pdf
 
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id ${data.strID} \
     --plot-type waterfall \
-    -o ${data.strID}.${meta.id}.${genome_version}.${params.readSet}.waterfall.pdf
+    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.waterfall.pdf
 
     """
 }
@@ -216,26 +216,26 @@ process trgt4_pureTarget_plots_meth{
 
     """
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id FXS_FMR1 \
     --show meth \
     --squished \
     --max-allele-reads 75 \
-    -o FXS_FMR1.${meta.id}.${genome_version}.${params.readSet}.METH.alleleSquished.pdf
+    -o FXS_FMR1.${meta.id}.${params.genome_version}.${params.readSet}.METH.alleleSquished.pdf
 
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id FXS_FMR1 \
     --plot-type waterfall \
     --show meth \
     --max-allele-reads 75 \
-    -o FXS_FMR1.${meta.id}.${genome_version}.${params.readSet}.METH.waterfall.pdf
+    -o FXS_FMR1.${meta.id}.${params.genome_version}.${params.readSet}.METH.waterfall.pdf
 
     """
 }
@@ -255,9 +255,9 @@ process trgt5_pureTarget{
     tuple val(meta), path(data)
     
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.trgt5.bam"), path("${meta.id}.${genome_version}.${params.readSet}.trgt5.bam.bai"), path("${meta.id}.${genome_version}.${params.readSet}.trgt5.vcf.gz"), path("${meta.id}.${genome_version}.${params.readSet}.trgt5.vcf.gz.tbi"),emit: trgt_full
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt5.bam"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt5.bam.bai"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt5.vcf.gz"), path("${meta.id}.${params.genome_version}.${params.readSet}.trgt5.vcf.gz.tbi"),emit: trgt_full
     tuple val(meta),path ("*.trgt5.*")
-    path("${meta.id}.${genome_version}.${params.readSet}.trgt5.vcf.gz"),emit: trgt_vcf
+    path("${meta.id}.${params.genome_version}.${params.readSet}.trgt5.vcf.gz"),emit: trgt_vcf
     script:
 
     //def sex=meta.sex=="male" ? "--karyotype XY" : "--karyotype XX"
@@ -265,17 +265,17 @@ process trgt5_pureTarget{
     """
     trgt genotype \
     --preset targeted \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     $karyotype \
     --reads ${data[0]} \
-    --output-prefix ${meta.id}.${genome_version}.${params.readSet}.trgt5.STRchive
+    --output-prefix ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.STRchive
 
-    bcftools sort -Oz -o ${meta.id}.${genome_version}.${params.readSet}.trgt5.vcf.gz ${meta.id}.${genome_version}.${params.readSet}.trgt5.STRchive.vcf.gz 
-    bcftools index -t ${meta.id}.${genome_version}.${params.readSet}.trgt5.vcf.gz
+    bcftools sort -Oz -o ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.vcf.gz ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.STRchive.vcf.gz 
+    bcftools index -t ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.vcf.gz
 
-    samtools sort -o ${meta.id}.${genome_version}.${params.readSet}.trgt5.bam ${meta.id}.${genome_version}.${params.readSet}.trgt5.STRchive.spanning.bam
-    samtools index ${meta.id}.${genome_version}.${params.readSet}.trgt5.bam
+    samtools sort -o ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.bam ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.STRchive.spanning.bam
+    samtools index ${meta.id}.${params.genome_version}.${params.readSet}.trgt5.bam
     """
 }
 
@@ -296,22 +296,22 @@ process trgt5_pureTarget_plots{
 
     """
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id ${data.strID} \
     --squished \
-    -o ${data.strID}.${meta.id}.${genome_version}.${params.readSet}.alleleSquished.pdf
+    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.alleleSquished.pdf
 
     trgt plot \
-    --genome ${genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --genome ${params.genome_fasta} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id ${data.strID} \
     --plot-type waterfall \
-    -o ${data.strID}.${meta.id}.${genome_version}.${params.readSet}.waterfall.pdf
+    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.waterfall.pdf
 
     """
 }
@@ -333,13 +333,13 @@ process methylationBW{
     tuple val(meta), path(data)
     
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.methylation*")
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.methylation*")
     
     script:
     """
     aligned_bam_to_cpg_scores \
     --bam ${data[0]} \
-    --output-prefix ${meta.id}.${genome_version}.${params.readSet}.methylation
+    --output-prefix ${meta.id}.${params.genome_version}.${params.readSet}.methylation
     """
 }
 
@@ -415,7 +415,7 @@ process mosdepthROI {
     tuple val(meta), path(data)  // meta: [npn,datatype,sampletype,id], data: [cram,crai]
 
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}_roi.*"),emit: mosdepth_roi
+    tuple val(meta), path("${meta.id}.${params.genome_version}_roi.*"),emit: mosdepth_roi
     tuple val(meta), path("*.region.dist.txt"), emit:multiqc
     script:
     def callable=params.genome=="hg38" ? "--by ${CALLABLE_ROI}" : "--by 1000"
@@ -423,7 +423,7 @@ process mosdepthROI {
     mosdepth \
     -t ${task.cpus} \
     $callable \
-    ${meta.id}.${genome_version}_roi \
+    ${meta.id}.${params.genome_version}_roi \
     ${data[0]}
 
     """
@@ -467,13 +467,13 @@ process cramino {
     tuple val(meta), path(data)  // meta: [npn,datatype,sampletype,id], data: [cram,crai]
 
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.craminoQC.txt")
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.craminoQC.txt")
 
     script:
     """
     cramino \
     -t ${task.cpus} \
-    ${data[0]} > ${meta.id}.${genome_version}.${params.readSet}.craminoQC.txt
+    ${data[0]} > ${meta.id}.${params.genome_version}.${params.readSet}.craminoQC.txt
     """
 }
 
@@ -490,13 +490,13 @@ process nanoStat {
     tuple val(meta), path(data)  // meta: [npn,datatype,sampletype,id], data: [cram,crai]
 
     output:
-    tuple val(meta), path("${meta.id}.${genome_version}.${params.readSet}.nanostat.txt"),emit: multiqc
-    path("${meta.id}.${genome_version}.${params.readSet}.nanostat.txt")
+    tuple val(meta), path("${meta.id}.${params.genome_version}.${params.readSet}.nanostat.txt"),emit: multiqc
+    path("${meta.id}.${params.genome_version}.${params.readSet}.nanostat.txt")
     script:
     """
     NanoStat \
     -t ${task.cpus} \
-    -n ${meta.id}.${genome_version}.${params.readSet}.nanostat.txt \
+    -n ${meta.id}.${params.genome_version}.${params.readSet}.nanostat.txt \
     --bam ${data[0]}
     """
 }

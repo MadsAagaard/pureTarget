@@ -57,7 +57,7 @@ if (params.input) {
         inputBam="${params.input}/**/*.hifi_reads.*.bam"
     }
     if (!params.hifiReads){
-        inputBam="${params.input}/**/*.{hifi_reads,fail_reads}.*.bam"
+        inputBam="${params.input}/*_reads/*.bam"
     }
     }
 
@@ -91,25 +91,40 @@ if (params.samplesheet) {
 }
 
 if (!params.samplesheet) {
+    def inputRunID = file(params.input).name
     Channel.fromPath(inputBam, followLinks: true)
-    |map { tuple(it.baseName,it) }
-    |map {id,bam -> 
-            (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
-            (instrument,date2,time)                      =pacbioID.tokenize("_")     
-            (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
-            meta=[id:samplename,caseID:date+"_"+testlist, gender:gender,rundate:date,testlist:testlist]
-            tuple(meta,bam)        
-        }
-
-    |groupTuple(sort:true)
-    |branch  {meta,bam -> 
-        UNASSIGNED: (meta.id=~/UNASSIGNED/)
-                    return [meta,bam]
-        samples: true
-                    return [meta,bam]
+    |map { tuple(it.baseName, it) }
+    |map { id, bam ->
+        def (samplenameFull, pacbioID, readset, barcode) = id.tokenize(".")
+        def (instrument, date2, time)                    = pacbioID.tokenize("_")
+        def (samplename, material, testlist, gender)     = samplenameFull.tokenize("_")
+        def sex = (gender == "K") ? "female" : "male"   // same logic as SS branch
+        def meta = [
+            npn          : samplename,                   
+            id           : "${samplename}.${testlist}", 
+            testlist     : testlist,
+            sex          : sex,                         
+            gender       : gender,                      
+            rundate      : date2,
+            metaRunID    : inputRunID,
+            analysisDate : date,
+            outKey       : inputRunID     
+        ]
+        tuple(meta, bam)
     }
-    | set {ubam_input }
+    |groupTuple(sort: true)
+    |view
+    |branch { meta, bam ->
+        UNASSIGNED: (meta.npn =~ /UNASSIGNED/)
+            return [meta, bam]
+        samples: true
+            return [meta, bam]
+    }
+    |set { ubam_input }
 }
+
+
+
 
     ubam_input.samples
         | map { meta, bam -> tuple(meta.npn,meta,bam) }
@@ -124,9 +139,24 @@ if (!params.samplesheet) {
         |set {samplesheet_join}
 
         samplesheet_join.join(ubam_input_samples)
-        |map {samplename, metaSS, metaData, bam -> tuple(metaSS+metaData,bam)}
-        |set {finalUbamInput}
-    }
+        |map { samplename, metaSS, metaData, bam ->
+            def merged = [
+                // Keys from metaSS are authoritative
+                npn          : metaSS.npn,
+                testlist     : metaSS.testlist,
+                sex          : metaSS.sex,
+                id           : metaSS.id,
+                metaRunID    : metaSS.metaRunID,
+                analysisDate : metaSS.analysisDate,
+                outKey       : metaSS.outKey,
+                // Keys from metaData that add useful info not in metaSS
+                rundate      : metaData.rundate,
+                gender       : metaData.gender,
+            ]
+        }
+    tuple(merged, bam)
+}
+|set {finalUbamInput}
 
     if (!params.samplesheet) {
         ubam_input.samples
