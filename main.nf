@@ -17,45 +17,6 @@ if (!params.samplesheet && !params.input) exit 0, inputError()
 
 if (params.samplesheet) {
 
-Channel
-  .fromPath(params.samplesheet, checkIfExists: true)
-  .flatMap { file ->
-
-    def metaRunID = file.baseName.replaceFirst(/_\d+.*/, '')
-
-    def lines = file.text.readLines()
-      .collect { it.trim() }
-      .findAll { it }
-
-    def header = 'Bio Sample Name,Plate Well,Adapter,Adapter2'
-    def idx = lines.findIndexOf { it == header }
-    if( idx < 0 )
-      return []
-
-    def sampleLines = lines[(idx+1)..<lines.size()]
-
-    sampleLines.collect { L ->
-      def cols = L.split(/\s*,\s*/, -1)
-      tuple(metaRunID, cols[0], cols[1], cols[2], cols[3])
-    }
-  }
-  .map { metaRunID, sampleInfo, flowcell, barcode1, barcode2 ->
-
-    def (npn, material, testlist, gender) = sampleInfo.tokenize("_")
-    def sex = (gender == "K") ? "female" : "male"
-
-    def meta = [
-        npn             : npn,
-        testlist        : testlist,
-        sex             : sex,
-        id              : "${npn}.${testlist}",
-        metaRunID       : metaRunID,
-        analysisDate    : date,
-        outKey          : metaRunID
-    ]
-    meta
-  }
-  .set { samplesheet_full }
 
 }
 
@@ -78,6 +39,8 @@ if (!params.input && (params.samplesheet)) {
     }
 
 if (params.samplesheet) {
+
+    // Input data (ubam) channel
     Channel.fromPath(inputBam, followLinks: true)
     |map { tuple(it.baseName,it) }
 
@@ -95,9 +58,80 @@ if (params.samplesheet) {
                     return [meta,bam]
     }
     | set {ubam_input }
+
+
+    ubam_input.samples
+        | map { meta, bam -> tuple(meta.npn,meta,bam) }
+        | set {ubam_input_samples_join}    
+
+
+    // Samplesheet channel
+    Channel.fromPath(params.samplesheet, checkIfExists: true)
+    .flatMap { file ->
+
+    def metaRunID = file.baseName.replaceFirst(/_\d+.*/, '')
+
+    def lines = file.text.readLines()
+      .collect { it.trim() }
+      .findAll { it }
+
+    def header = 'Bio Sample Name,Plate Well,Adapter,Adapter2'
+    def idx = lines.findIndexOf { it == header }
+    if( idx < 0 )
+      return []
+
+    def sampleLines = lines[(idx+1)..<lines.size()]
+
+    sampleLines.collect { L ->
+      def cols = L.split(/\s*,\s*/, -1)
+      tuple(metaRunID, cols[0], cols[1], cols[2], cols[3])
+    }
+    }
+    .map { metaRunID, sampleInfo, flowcell, barcode1, barcode2 ->
+
+    def (npn, material, testlist, gender) = sampleInfo.tokenize("_")
+    def sex = (gender == "K") ? "female" : "male"
+
+    def meta = [
+        npn             : npn,
+        testlist        : testlist,
+        sex             : sex,
+        id              : "${npn}.${testlist}",
+        metaRunID       : metaRunID,
+        analysisDate    : date,
+        outKey          : metaRunID
+    ]
+    meta
+    }
+    |set { samplesheet_full }
+
+    samplesheet_full
+    |map {row -> meta2=[row.npn,row]}
+    |set {samplesheet_join}
+
+
+    //join samplesheet and bam channels:
+    samplesheet_join.join(ubam_input_samples_join)
+    |map { samplename, metaSS, metaData, bam ->
+        def merged = [
+            // Keys from metaSS are authoritative
+            npn          : metaSS.npn,
+            testlist     : metaSS.testlist,
+            sex          : metaSS.sex,
+            id           : metaSS.id,
+            metaRunID    : metaSS.metaRunID,
+            analysisDate : metaSS.analysisDate,
+            outKey       : metaSS.outKey,
+            // Keys from metaData that add useful info not in metaSS
+            rundate      : metaData.rundate,
+            gender       : metaData.gender,
+        ]
+    }
+    tuple(merged, bam)
+    |set {finalUbamInput}
 }
 
-if (!params.samplesheet) {
+if (!params.samplesheet && params.input) {
     def inputRunID = file(params.input).name
     Channel.fromPath(inputBam, followLinks: true)
     |map { tuple(it.baseName, it) }
@@ -128,47 +162,10 @@ if (!params.samplesheet) {
             return [meta, bam]
     }
     |set { ubam_input }
-}
-
-
+    
     ubam_input.samples
-        | map { meta, bam -> tuple(meta.npn,meta,bam) }
-        | set {ubam_input_samples}    
-
-
-
-    if (params.samplesheet) {
-
-        samplesheet_full
-        |map {row -> meta2=[row.npn,row]}
-        |set {samplesheet_join}
-
-        samplesheet_join.join(ubam_input_samples)
-        |map { samplename, metaSS, metaData, bam ->
-            def merged = [
-                // Keys from metaSS are authoritative
-                npn          : metaSS.npn,
-                testlist     : metaSS.testlist,
-                sex          : metaSS.sex,
-                id           : metaSS.id,
-                metaRunID    : metaSS.metaRunID,
-                analysisDate : metaSS.analysisDate,
-                outKey       : metaSS.outKey,
-                // Keys from metaData that add useful info not in metaSS
-                rundate      : metaData.rundate,
-                gender       : metaData.gender,
-            ]
-        }
-    tuple(merged, bam)
+    |set {finalUbamInput}
 }
-|set {finalUbamInput}
-
-    if (!params.samplesheet) {
-        ubam_input.samples
-        |set {finalUbamInput}
-    }
-
-
 
 
 /////////////////// MODULES ///////////////////////
