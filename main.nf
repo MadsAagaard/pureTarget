@@ -154,7 +154,6 @@ if (!params.samplesheet && params.input) {
         tuple(meta, bam)
     }
     |groupTuple(sort: true)
-    |view
     |branch { meta, bam ->
         UNASSIGNED: (meta.npn =~ /UNASSIGNED/)
             return [meta, bam]
