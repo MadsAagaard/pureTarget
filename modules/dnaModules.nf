@@ -13,7 +13,7 @@ runID="${date}.${user}"
 
 log.info """\
 ======================================================
-Clinical Genetics Vejle: PacBio PureTarget v2
+Clinical Genetics Vejle: PacBio PureTarget DEV
 ======================================================
 Genome       : $params.genome
 Genome FASTA : $params.genome_fasta
