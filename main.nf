@@ -126,8 +126,8 @@ if (params.samplesheet) {
             rundate      : metaData.rundate,
             gender       : metaData.gender,
         ]
+        tuple(merged, bam)
     }
-    tuple(merged, bam)
     |set {finalUbamInput}
 }
 
