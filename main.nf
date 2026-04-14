@@ -7,6 +7,13 @@ runID="${date}.${user}"
 
 //////////// DEFAULT INPUT ///////////////////////
 
+def inputError() {
+    log.info"""
+    USER INPUT ERROR: The user should point to a samplesheet (--samplesheet parameter) or input folder containing all data to be used as input (--input parameter).
+    """.stripIndent()
+}
+
+if (!params.samplesheet && !params.input) exit 0, inputError() 
 
 if (params.samplesheet) {
 
@@ -122,8 +129,6 @@ if (!params.samplesheet) {
     }
     |set { ubam_input }
 }
-
-
 
 
     ubam_input.samples
