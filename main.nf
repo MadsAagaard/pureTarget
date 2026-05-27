@@ -96,6 +96,7 @@ if (params.samplesheet) {
         npn             : npn,
         testlist        : testlist,
         sex             : sex,
+        gender:         gender,
         id              : "${npn}.${testlist}",
         metaRunID       : metaRunID,
         analysisDate    : date,
