@@ -103,6 +103,7 @@ if (params.samplesheet) {
     ]
     meta
     }
+    |view
     |set { samplesheet_full }
 
     samplesheet_full
