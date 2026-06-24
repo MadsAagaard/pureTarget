@@ -182,7 +182,7 @@ process trgt4_pureTarget_plots{
     """
     for gene in ${geneList}; do
     trgt plot \
-    --genome ${genome_fasta} \
+    --genome ${params.genome_fasta} \
     --repeats ${tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
@@ -191,7 +191,7 @@ process trgt4_pureTarget_plots{
     -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.alleleSquished.pdf
 
     trgt plot \
-    --genome ${genome_fasta} \
+    --genome ${params.genome_fasta} \
     --repeats ${tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
