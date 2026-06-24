@@ -178,24 +178,26 @@ process trgt4_pureTarget_plots{
     tuple val(meta), path("*.{pdf,png,svg}")
     script:
 
+    def geneList = params.puretargetPlotGenes.join(' ')
     """
+    for gene in ${geneList}; do
     trgt plot \
-    --genome ${params.genome_fasta} \
-    --repeats ${params.tr_pathogenic_v2} \
+    --genome ${genome_fasta} \
+    --repeats ${tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
-    --repeat-id ${data.strID} \
+    --repeat-id \$gene \
     --squished \
-    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.alleleSquished.pdf
+    -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.alleleSquished.pdf
 
     trgt plot \
-    --genome ${params.genome_fasta} \
-    --repeats ${params.tr_pathogenic_v2} \
+    --genome ${genome_fasta} \
+    --repeats ${tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
-    --repeat-id ${data.strID} \
+    --repeat-id \$gene \
     --plot-type waterfall \
-    -o ${data.strID}.${meta.id}.${params.genome_version}.${params.readSet}.waterfall.pdf
+    -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.waterfall.pdf
 
     """
 }
