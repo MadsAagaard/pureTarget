@@ -183,7 +183,7 @@ process trgt4_pureTarget_plots{
     for gene in ${geneList}; do
     trgt plot \
     --genome ${params.genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id \$gene \
@@ -192,7 +192,7 @@ process trgt4_pureTarget_plots{
 
     trgt plot \
     --genome ${params.genome_fasta} \
-    --repeats ${tr_pathogenic_v2} \
+    --repeats ${params.tr_pathogenic_v2} \
     --vcf ${data.vcf} \
     --spanning-reads ${data.bam} \
     --repeat-id \$gene \
