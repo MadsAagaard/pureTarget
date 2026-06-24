@@ -198,7 +198,7 @@ process trgt4_pureTarget_plots{
     --repeat-id \$gene \
     --plot-type waterfall \
     -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.waterfall.pdf
-
+    done
     """
 }
 
