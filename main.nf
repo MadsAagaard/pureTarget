@@ -96,6 +96,7 @@ if (params.samplesheet) {
         npn             : npn,
         testlist        : testlist,
         sex             : sex,
+        gender          : gender,
         id              : "${npn}.${testlist}",
         metaRunID       : metaRunID,
         analysisDate    : date,
@@ -212,10 +213,18 @@ workflow {
     trgt4_pureTarget(alignedFinal)
     trgt5_pureTarget(alignedFinal)
 
+/*
     trgt4_pureTarget.out.trgt_full.combine(params.puretargetPlotGenes)
     |map {meta,bam,bai,vcf,tbi,genes -> 
     tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi,strID:genes])}
     //tuple(meta,bam,genes)}
+    |set {trgt4_plot_ch}
+    trgt4_pureTarget_plots(trgt4_plot_ch)
+*/
+
+    trgt4_pureTarget.out.trgt_full
+    |map {meta,bam,bai,vcf,tbi -> 
+    tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi])}
     |set {trgt4_plot_ch}
     trgt4_pureTarget_plots(trgt4_plot_ch)
 
@@ -227,9 +236,9 @@ workflow {
 
     trgt4_pureTarget_plots_meth(trgt4_plot_ch_meth)
 
-    trgt5_pureTarget.out.trgt_full.combine(params.puretargetPlotGenes)
-    |map {meta,bam,bai,vcf,tbi,genes -> 
-    tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi,strID:genes])}
+    trgt5_pureTarget.out.trgt_full
+    |map {meta,bam,bai,vcf,tbi -> 
+    tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi])}
     |set {trgt5_plot_ch}
     trgt5_pureTarget_plots(trgt5_plot_ch)
 
