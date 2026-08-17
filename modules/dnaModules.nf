@@ -307,6 +307,7 @@ process trgt5_pureTarget_plots{
     --repeat-id \$gene \
     --squished \
     -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.alleleSquished.pdf
+     || echo "WARN: squished plot failed for \$gene" >&2
 
     trgt plot \
     --genome ${params.genome_fasta} \
@@ -316,6 +317,7 @@ process trgt5_pureTarget_plots{
     --repeat-id \$gene \
     --plot-type waterfall \
     -o ${meta.id}.${params.genome_version}.${params.readSet}.\$gene.waterfall.pdf
+    || echo "WARN: waterfall plot failed for \$gene" >&2
     done
     """
 }
