@@ -23,6 +23,9 @@ RunID        : $runID
 Script start : $date2
 ReadSet      : $params.readSet
 outputDir    : $params.outputDirBase 
+lrsShared    : $params.lrsSharedDir
+lrsCustomTools : $params.lrsCustomToolsBase
+errorMode    : $params.errorMode
 """
 
 
