@@ -12,6 +12,15 @@ This pipeline is used for PacBio PureTarget at Clinical Genetics, Vejle
 
 # Usage
 
+## Nextflow version
+The pipeline is written in Nextflow strict syntax and needs Nextflow 26.04 or later. With an older
+Nextflow the run stops with "Script compilation error" at the `params` block in main.nf. Select the
+version per run with NXF_VER, e.g.:
+
+    NXF_VER=26.10.3 nextflow run MadsAagaard/pureTarget -r dev --samplesheet /path/to/samplesheet.csv
+
+Shared configs: /data/configs/lrsShared/v2 (lrsShared.config, finalize.config, genomes/hg38.config).
+
 ## Default samplesheet format (use samplesheet used for sequencing)
 The default samplesheet is simply the same as used to sequence the samples (.csv file)
 The script will extract relevant information from the samplesheet for each sample, including:
