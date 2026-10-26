@@ -1,8 +1,19 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl = 2
-date=new Date().format( 'yyMMdd' )
-user="$USER"
-runID="${date}.${user}"
+
+// Nextflow strict syntax (Nextflow 26.04 or later, see nextflow.config).
+// The strict parser does not convert command-line values by itself: without a
+// type, --hifiReads false would reach this script as the text 'false', which
+// counts as true. These flags are declared with their type here. The config
+// files convert a value to the type of their own default, so the same flags
+// default to false (not null) in lrsShared.config and conf/pureTarget.config.
+// Text flags (--samplesheet, --input, --outdir, ...) need no entry.
+params {
+    hifiReads: Boolean = false
+    single: Boolean = false
+    latestVersions: Boolean = false
+    slurmA: Boolean = false
+}
 
 
 //////////// DEFAULT INPUT ///////////////////////
@@ -13,160 +24,6 @@ def inputError() {
     """.stripIndent()
 }
 
-if (!params.samplesheet && !params.input) exit 0, inputError() 
-
-if (params.samplesheet) {
-
-
-}
-
-if (params.input) {
-    if (params.hifiReads){
-        inputBam="${params.input}/**/*.hifi_reads.*.bam"
-    }
-    if (!params.hifiReads){
-        inputBam="${params.input}/*_reads/*.bam"
-    }
-    }
-
-if (!params.input && (params.samplesheet)) {
-    if (params.hifiReads){
-        inputBam="${params.dataArchive}/**/*.hifi_reads.*.bam"
-    }
-    if (!params.hifiReads){
-        inputBam="${params.dataArchive}/**/*.bam"
-    }
-    }
-
-if (params.samplesheet) {
-
-    // Input data (ubam) channel
-    Channel.fromPath(inputBam, followLinks: true)
-    |map { tuple(it.baseName,it) }
-
-    |map {id,bam -> 
-        def (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
-        def (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
-            meta=[npn:samplename]
-            tuple(meta,bam)        
-        }
-    |groupTuple(sort:true)
-    |branch  {meta,bam -> 
-        UNASSIGNED: (meta.npn=~/UNASSIGNED/)
-                    return [meta,bam]
-        samples: true
-                    return [meta,bam]
-    }
-    | set {ubam_input }
-
-
-    ubam_input.samples
-        | map { meta, bam -> tuple(meta.npn,meta,bam) }
-        | set {ubam_input_samples_join}    
-
-
-    // Samplesheet channel
-    Channel.fromPath(params.samplesheet, checkIfExists: true)
-    .flatMap { file ->
-
-    def metaRunID = file.baseName.replaceFirst(/_\d+.*/, '')
-
-    def lines = file.text.readLines()
-      .collect { it.trim() }
-      .findAll { it }
-
-    def header = 'Bio Sample Name,Plate Well,Adapter,Adapter2'
-    def idx = lines.findIndexOf { it == header }
-    if( idx < 0 )
-      return []
-
-    def sampleLines = lines[(idx+1)..<lines.size()]
-
-    sampleLines.collect { L ->
-      def cols = L.split(/\s*,\s*/, -1)
-      tuple(metaRunID, cols[0], cols[1], cols[2], cols[3])
-    }
-    }
-    .map { metaRunID, sampleInfo, flowcell, barcode1, barcode2 ->
-
-    def (npn, material, testlist, gender) = sampleInfo.tokenize("_")
-    def sex = (gender == "K") ? "female" : "male"
-
-    def meta = [
-        npn             : npn,
-        testlist        : testlist,
-        sex             : sex,
-        gender          : gender,
-        id              : "${npn}.${testlist}",
-        metaRunID       : metaRunID,
-        analysisDate    : date,
-        outKey          : metaRunID
-    ]
-    meta
-    }
-    |set { samplesheet_full }
-
-    samplesheet_full
-    |map {row -> meta2=[row.npn,row]}
-    |set {samplesheet_join}
-
-
-    //join samplesheet and bam channels:
-    samplesheet_join.join(ubam_input_samples_join)
-    |map { samplename, metaSS, metaData, bam ->
-        def merged = [
-            // Keys from metaSS are authoritative
-            npn          : metaSS.npn,
-            testlist     : metaSS.testlist,
-            sex          : metaSS.sex,
-            id           : metaSS.id,
-            metaRunID    : metaSS.metaRunID,
-            analysisDate : metaSS.analysisDate,
-            outKey       : metaSS.outKey,
-            // Keys from metaData that add useful info not in metaSS
-            rundate      : metaData.rundate,
-            gender       : metaData.gender,
-        ]
-        tuple(merged, bam)
-    }
-    |set {finalUbamInput}
-}
-
-if (!params.samplesheet && params.input) {
-    def inputRunID = file(params.input).name
-    Channel.fromPath(inputBam, followLinks: true)
-    |map { tuple(it.baseName, it) }
-    |map { id, bam ->
-        def (samplenameFull, pacbioID, readset, barcode) = id.tokenize(".")
-        def (instrument, date2, time)                    = pacbioID.tokenize("_")
-        def (samplename, material, testlist, gender)     = samplenameFull.tokenize("_")
-        def sex = (gender == "K") ? "female" : "male"   // same logic as SS branch
-        def meta = [
-            npn          : samplename,                   
-            id           : "${samplename}.${testlist}", 
-            testlist     : testlist,
-            sex          : sex,                         
-            gender       : gender,                      
-            rundate      : date2,
-            metaRunID    : inputRunID,
-            analysisDate : date,
-            outKey       : inputRunID     
-        ]
-        tuple(meta, bam)
-    }
-    |groupTuple(sort: true)
-    |branch { meta, bam ->
-        UNASSIGNED: (meta.npn =~ /UNASSIGNED/)
-            return [meta, bam]
-        samples: true
-            return [meta, bam]
-    }
-    |set { ubam_input }
-    
-    ubam_input.samples
-    |set {finalUbamInput}
-}
-
 
 /////////////////// MODULES ///////////////////////
 include {create_fofn;
@@ -175,19 +32,18 @@ include {create_fofn;
         trgt4_pureTarget;
         trgt5_pureTarget;
         methylationBW;
-        methylationSegm;
         trgt4_pureTarget_plots;
         trgt4_pureTarget_plots_meth;
         trgt5_pureTarget_plots;
-        } from "./modules/dnaModules.nf" 
+        } from "./modules/dnaModules.nf"
 
 ////////////////// WORKFLOWS AND PROCESSES ///////////////////////
 
 workflow PREPROCESS {
 
     take:
-    finalUbamInput     
-   
+    finalUbamInput
+
     main:
 
     inputFiles_symlinks_ubam(finalUbamInput)
@@ -197,11 +53,191 @@ workflow PREPROCESS {
 
     emit:
     aligned=pbmm2_align_mergedData.out.bam
-    
+
 }
 
 workflow {
 
+    def date  = new Date().format( 'yyMMdd' )
+    def scriptStart = new Date().format( 'yyMMdd HH:mm:ss' )
+    def user  = System.getenv('USER')
+    def runID = "${date}.${user}"
+
+    // Run header (was at the top of modules/dnaModules.nf)
+    log.info """\
+======================================================
+Clinical Genetics Vejle: PacBio PureTarget v2
+======================================================
+Genome       : $params.genome
+Genome FASTA : $params.genomeFasta
+Genome MMI   : $params.genomeMmi
+Genome ver.  : $params.genomeVersion
+RunID        : $runID
+Script start : $scriptStart
+ReadSet      : $params.readSet
+outputDir    : $params.outputDirBase
+lrsShared    : $params.lrsSharedDir
+lrsCustomTools : $params.lrsCustomToolsBase
+errorMode    : $params.errorMode
+"""
+
+    if (params.genome != 'hg38') {
+        error "pureTarget supports --genome hg38 only (got '${params.genome}')."
+    }
+
+    if (!params.samplesheet && !params.input) {
+        inputError()
+        exit 0
+    }
+
+    def inputBam = null
+
+    if (params.input) {
+        if (params.hifiReads){
+            inputBam="${params.input}/**/*.hifi_reads.*.bam"
+        }
+        if (!params.hifiReads){
+            inputBam="${params.input}/*_reads/*.bam"
+        }
+        }
+
+    if (!params.input && (params.samplesheet)) {
+        if (params.hifiReads){
+            inputBam="${params.dataArchive}/**/*.hifi_reads.*.bam"
+        }
+        if (!params.hifiReads){
+            inputBam="${params.dataArchive}/**/*.bam"
+        }
+        }
+
+    def finalUbamInput = null
+
+    if (params.samplesheet) {
+
+        // Input data (ubam) channel
+        Channel.fromPath(inputBam, followLinks: true)
+        |map { tuple(it.baseName,it) }
+
+        |map {id,bam ->
+            def (samplenameFull,pacbioID,readset,barcode)   =id.tokenize(".")
+            def (samplename,material,testlist,gender)       =samplenameFull.tokenize("_")
+                def meta=[npn:samplename]
+                tuple(meta,bam)
+            }
+        |groupTuple(sort:true)
+        |branch  {meta,bam ->
+            UNASSIGNED: (meta.npn=~/UNASSIGNED/)
+                        return [meta,bam]
+            samples: true
+                        return [meta,bam]
+        }
+        | set {ubam_input }
+
+
+        ubam_input.samples
+            | map { meta, bam -> tuple(meta.npn,meta,bam) }
+            | set {ubam_input_samples_join}
+
+
+        // Samplesheet channel
+        Channel.fromPath(params.samplesheet, checkIfExists: true)
+        .flatMap { file ->
+
+        def metaRunID = file.baseName.replaceFirst(/_\d+.*/, '')
+
+        def lines = file.text.readLines()
+          .collect { it.trim() }
+          .findAll { it }
+
+        def header = 'Bio Sample Name,Plate Well,Adapter,Adapter2'
+        def idx = lines.findIndexOf { it == header }
+        if( idx < 0 )
+          return []
+
+        def sampleLines = lines[(idx+1)..<lines.size()]
+
+        sampleLines.collect { L ->
+          def cols = L.split(/\s*,\s*/, -1)
+          tuple(metaRunID, cols[0], cols[1], cols[2], cols[3])
+        }
+        }
+        .map { metaRunID, sampleInfo, flowcell, barcode1, barcode2 ->
+
+        def (npn, material, testlist, gender) = sampleInfo.tokenize("_")
+        def sex = (gender == "K") ? "female" : "male"
+
+        def meta = [
+            npn             : npn,
+            testlist        : testlist,
+            sex             : sex,
+            gender          : gender,
+            id              : "${npn}.${testlist}",
+            metaRunID       : metaRunID,
+            analysisDate    : date,
+            outKey          : metaRunID
+        ]
+        meta
+        }
+        |set { samplesheet_full }
+
+        samplesheet_full
+        |map {row -> def meta2=[row.npn,row]}
+        |set {samplesheet_join}
+
+
+        //join samplesheet and bam channels:
+        finalUbamInput = samplesheet_join.join(ubam_input_samples_join)
+        |map { samplename, metaSS, metaData, bam ->
+            def merged = [
+                // Keys from metaSS are authoritative
+                npn          : metaSS.npn,
+                testlist     : metaSS.testlist,
+                sex          : metaSS.sex,
+                id           : metaSS.id,
+                metaRunID    : metaSS.metaRunID,
+                analysisDate : metaSS.analysisDate,
+                outKey       : metaSS.outKey,
+                // Keys from metaData that add useful info not in metaSS
+                rundate      : metaData.rundate,
+                gender       : metaData.gender,
+            ]
+            tuple(merged, bam)
+        }
+    }
+
+    if (!params.samplesheet && params.input) {
+        def inputRunID = file(params.input).name
+        Channel.fromPath(inputBam, followLinks: true)
+        |map { tuple(it.baseName, it) }
+        |map { id, bam ->
+            def (samplenameFull, pacbioID, readset, barcode) = id.tokenize(".")
+            def (instrument, date2, time)                    = pacbioID.tokenize("_")
+            def (samplename, material, testlist, gender)     = samplenameFull.tokenize("_")
+            def sex = (gender == "K") ? "female" : "male"   // same logic as SS branch
+            def meta = [
+                npn          : samplename,
+                id           : "${samplename}.${testlist}",
+                testlist     : testlist,
+                sex          : sex,
+                gender       : gender,
+                rundate      : date2,
+                metaRunID    : inputRunID,
+                analysisDate : date,
+                outKey       : inputRunID
+            ]
+            tuple(meta, bam)
+        }
+        |groupTuple(sort: true)
+        |branch { meta, bam ->
+            UNASSIGNED: (meta.npn =~ /UNASSIGNED/)
+                return [meta, bam]
+            samples: true
+                return [meta, bam]
+        }
+        |set { ubam_input }
+
+        finalUbamInput = ubam_input.samples
+    }
 
 
     PREPROCESS(finalUbamInput)
@@ -215,7 +251,7 @@ workflow {
 
 /*
     trgt4_pureTarget.out.trgt_full.combine(params.puretargetPlotGenes)
-    |map {meta,bam,bai,vcf,tbi,genes -> 
+    |map {meta,bam,bai,vcf,tbi,genes ->
     tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi,strID:genes])}
     //tuple(meta,bam,genes)}
     |set {trgt4_plot_ch}
@@ -223,62 +259,62 @@ workflow {
 */
 
     trgt4_pureTarget.out.trgt_full
-    |map {meta,bam,bai,vcf,tbi -> 
+    |map {meta,bam,bai,vcf,tbi ->
     tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi])}
     |set {trgt4_plot_ch}
     trgt4_pureTarget_plots(trgt4_plot_ch)
 
 
     trgt4_pureTarget.out.trgt_full
-    |map {meta,bam,bai,vcf,tbi -> 
+    |map {meta,bam,bai,vcf,tbi ->
     tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi])}
     |set {trgt4_plot_ch_meth}
 
     trgt4_pureTarget_plots_meth(trgt4_plot_ch_meth)
 
     trgt5_pureTarget.out.trgt_full
-    |map {meta,bam,bai,vcf,tbi -> 
+    |map {meta,bam,bai,vcf,tbi ->
     tuple(meta,[bam:bam,bai:bai,vcf:vcf,tbi:tbi])}
     |set {trgt5_plot_ch}
     trgt5_pureTarget_plots(trgt5_plot_ch)
 
  methylationBW(alignedFinal)
 
-}
 
-///////////////////////////////////////////////////
-/////// ------- COMPLETION ------- ////////////////
-///////////////////////////////////////////////////
+    ///////////////////////////////////////////////////
+    /////// ------- COMPLETION ------- ////////////////
+    ///////////////////////////////////////////////////
 
-workflow.onComplete {
+    workflow.onComplete = {
 
-    // ---- failure manifest (same as germline and PTCP) -----------------------
-    // errorMode = 'cohort' (the pureTarget default) lets a failed task be
-    // ignored so the rest of the run finishes. That is only acceptable if the
-    // skip is recorded somewhere a human will see it.
-    def failed = (workflow.stats.failedCount ?: 0) + (workflow.stats.ignoredCount ?: 0)
+        // ---- failure manifest (same as germline and PTCP) -----------------------
+        // errorMode = 'cohort' (the pureTarget default) lets a failed task be
+        // ignored so the rest of the run finishes. That is only acceptable if the
+        // skip is recorded somewhere a human will see it.
+        def failed = (workflow.stats.failedCount ?: 0) + (workflow.stats.ignoredCount ?: 0)
 
-    if (failed > 0) {
-        try {
-            def f = file("${params.outputDirBase}/runInfo/${params.dateStamp}_${params.ssBase}/FAILED_TASKS.pureTarget.txt")
-            f.parent.mkdirs()
-            f.text = """\
-                Run          : ${workflow.runName}
-                Completed    : ${workflow.complete}
-                Succeeded    : ${workflow.stats.succeedCount}
-                Failed       : ${workflow.stats.failedCount}
-                Ignored      : ${workflow.stats.ignoredCount}
-                Error mode   : ${params.errorMode}
-                Output root  : ${params.outputDirBase}
+        if (failed > 0) {
+            try {
+                def f = file("${params.outputDirBase}/runInfo/${params.dateStamp}_${params.ssBase}/FAILED_TASKS.pureTarget.txt")
+                f.parent.mkdirs()
+                f.text = """\
+                    Run          : ${workflow.runName}
+                    Completed    : ${workflow.complete}
+                    Succeeded    : ${workflow.stats.succeedCount}
+                    Failed       : ${workflow.stats.failedCount}
+                    Ignored      : ${workflow.stats.ignoredCount}
+                    Error mode   : ${params.errorMode}
+                    Output root  : ${params.outputDirBase}
 
-                Per-task detail is in the trace file under NextflowReports/.
-                Output for the affected samples is INCOMPLETE and must not be
-                reported without review.
-                """.stripIndent()
-            log.warn "*** ${failed} task(s) failed or were ignored — see ${f} ***"
-        }
-        catch (Exception e) {
-            log.warn "Could not write FAILED_TASKS.pureTarget.txt: ${e.message}"
+                    Per-task detail is in the trace file under NextflowReports/.
+                    Output for the affected samples is INCOMPLETE and must not be
+                    reported without review.
+                    """.stripIndent()
+                log.warn "*** ${failed} task(s) failed or were ignored — see ${f} ***"
+            }
+            catch (Exception e) {
+                log.warn "Could not write FAILED_TASKS.pureTarget.txt: ${e.message}"
+            }
         }
     }
 }
