@@ -3,30 +3,8 @@ nextflow.enable.dsl = 2
 
 /*
 */
-date=new Date().format( 'yyMMdd' )
-date2=new Date().format( 'yyMMdd HH:mm:ss' )
-user="$USER"
-runID="${date}.${user}"
-
-//////////////////////////// SWITCHES ///////////////////////////////// 
-
-
-log.info """\
-======================================================
-Clinical Genetics Vejle: PacBio PureTarget v2
-======================================================
-Genome       : $params.genome
-Genome FASTA : $params.genomeFasta
-Genome MMI   : $params.genomeMmi
-Genome ver.  : $params.genomeVersion
-RunID        : $runID
-Script start : $date2
-ReadSet      : $params.readSet
-outputDir    : $params.outputDirBase 
-lrsShared    : $params.lrsSharedDir
-lrsCustomTools : $params.lrsCustomToolsBase
-errorMode    : $params.errorMode
-"""
+// The run header and the date/user/runID values moved to main.nf (entry workflow):
+// strict syntax allows no statements at the top level of a module file.
 
 
 ////////////////////////////////////////////
@@ -352,30 +330,6 @@ process methylationBW{
     """
 }
 
-process methylationSegm{
-    tag "$meta.id"
-    errorStrategy 'ignore'
-    cpus 20
-    conda "${params.condaEnvs.methbat}"
-
-    publishDir {"${params.outBase(meta)}/methylation/"}, mode: 'copy'
-
-    input:
-    tuple val(meta), path(data)
-    
-    output:
-    tuple val(meta), path("${meta.id}.met.*")
-    
-    script:
-    """
-    methbat profile \
-    --input-prefix ${meta.id}.methylation \
-    --input-regions ${methylationBackground} \
-    --output-region-profile ${meta.id}.met.profile
-    """
-}
-
-
 ///////////////////////////////////////////////////
 /////// ------- QUALITY CONTROL ------- ///////////
 ///////////////////////////////////////////////////
@@ -410,34 +364,6 @@ process qualimap {
 
     """
 }
-
-process mosdepthROI {
-    tag "$meta.id"
-    errorStrategy 'ignore'
-
-    //publishDir {params.groupedOutput ? "${outputDir}/QC/mosdepth/" : "${outputDir}/${meta.id}/QC/mosdepth/"}, mode: 'copy'
-
-    conda '/lnx01_data3/shared/programmer/miniconda3/envs/mosdepth/' 
-    cpus 8
-
-    input: 
-    tuple val(meta), path(data)  // meta: [npn,datatype,sampletype,id], data: [cram,crai]
-
-    output:
-    tuple val(meta), path("${meta.id}.${params.genomeVersion}_roi.*"),emit: mosdepth_roi
-    tuple val(meta), path("*.region.dist.txt"), emit:multiqc
-    script:
-    def callable=params.genome=="hg38" ? "--by ${CALLABLE_ROI}" : "--by 1000"
-    """
-    mosdepth \
-    -t ${task.cpus} \
-    $callable \
-    ${meta.id}.${params.genomeVersion}_roi \
-    ${data[0]}
-
-    """
-}
-
 
 process whatsHap_stats {
     tag "$meta.id"
@@ -509,117 +435,3 @@ process nanoStat {
     --bam ${data[0]}
     """
 }
-
-
-process multiQC {
-    tag "$meta.id"
-    errorStrategy 'ignore'
-
-    //publishDir {params.groupedOutput ? "${outputDir}/QC/" : "${outputDir}/${meta.id}/QC/"}, mode: 'copy'
-
-    conda '/lnx01_data3/shared/programmer/miniconda3/envs/multiqc/' 
-
-    when:
-    !params.groupedOutput
-
-    input:
-    tuple val(meta),  path(data)  
-
-    output:
-    path ("*MultiQC*.html")
-
-    script:
-    """
-    multiqc \
-    -c ${multiqc_config} \
-    -f -q ${launchDir}/${outputDir}/${meta.id}/QC/ \
-    -n ${meta.id}.MultiQC.DNA.html
-    """
-}
-
-process multiQC_ALL {
-    
-    //errorStrategy 'ignore'
-    //publishDir "${outputDir}/", mode: 'copy'
-
-    conda '/lnx01_data3/shared/programmer/miniconda3/envs/multiqc/' 
-
-    input:
-    tuple val(meta),path(data)  
-    //   path("_fastqc.*").collect().ifEmpty([])
-    // path("${meta.id}.samtools.sample.stats.txt").collect().ifEmpty([])
-    // path("bamQC/*").collect().ifEmpty([]) 
-    //path("${meta.id}.picardWGSmetrics.txt").collect().ifEmpty([]) 
-
-    output:
-    path ("${params.rundir}.MultiQC.ALL.html")
-
-    script:
-    """
-    multiqc \
-    -c ${multiqc_config} \
-    -f -q ${launchDir}/${outputDir}/*/QC/ \
-    -n ${params.rundir}.MultiQC.ALL.html
-    """
-}
-
-/////////////// TO DO /////////////////////
-
-process vntyper2 {
-    errorStrategy 'ignore'
-    //publishDir "${outputDir}/MUC1-VNTR_kestrel/", mode: 'copy'
-    cpus 16
-
-    input:
-    tuple val(meta), path(reads)
-
-    output:
-    //tuple val(meta), path("vntyper${meta.id}.vntyper/*")
-    tuple val(meta), path("*/*.{tsv,vcf}")
-    script:
-    
-    def reads_command = "--fastq1 ${reads[0]} --fastq2 ${reads[1]}"
-    
-    """
-    singularity run -B ${s_bind} ${simgpath}/vntyper20.sif \
-    -ref ${vntyperREF}/chr1.fa \
-    --fastq1 ${r1} --fastq2 ${r2} \
-    -t ${task.cpus} \
-    -w vntyper \
-    -m ${vntyperREF}/hg19_genic_VNTRs.db \
-    -o ${meta.id} \
-    -ref_VNTR ${vntyperREF}/MUC1-VNTR_NEW.fa \
-    --fastq \
-    --ignore_advntr \
-    -p /data/shared/programmer/vntyper/VNtyper/
-    """
-}
-
-
-process advntr {
-
-    errorStrategy 'ignore'
-    tag "$meta.id"
-    cpus 8
-    //publishDir "${outputDir}/${meta.id}/advntr/", mode: 'copy', pattern: "*.advntr.*"
-
-    conda '/lnx01_data3/shared/programmer/miniconda3/envs/advntr15/'
-
-    input:
-    tuple val(meta), path(data)
-    
-    output:
-    tuple val(meta), path("${meta.id}.advntr.*")
-    
-    script:
-    """
-    advntr genotype \
-    -f ${data[0]} \
-    --pacbio \
-    -m ${vntr_defaultModel} \
-    -o ${meta.id}.advntrDefault
-    """
-}
-
-
-
